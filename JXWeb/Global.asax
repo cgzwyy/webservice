@@ -1,0 +1,1 @@
+﻿<%@ Application Inherits="H9000.DataInterFace.Global"  Language="C#" %>
