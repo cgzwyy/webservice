@@ -71,6 +71,17 @@ namespace H9000.DataInterFace
             }
         }
 
+        private static int DateDiff(DateTime DateTime1, DateTime DateTime2)
+        {
+            int datediff = 0;
+            TimeSpan ts1 = new TimeSpan(DateTime1.Ticks);
+            TimeSpan ts2 = new TimeSpan(DateTime2.Ticks);
+            TimeSpan ts = ts1.Subtract(ts2).Duration();
+            datediff = ts.Days;
+            return datediff;
+        }
+
+
         [WebMethod(Description = "登录验证")]
         public string isUser(string username, string password)
         {
@@ -353,6 +364,293 @@ namespace H9000.DataInterFace
 
         }
 
+        [WebMethod(Description = "传入时间、两个遥测代码，获取实时功率、预测功率数据")]
+        public String GetStationP2(string sdate, string station_name)
+        {
+            WriteLogFile("调用方法GetStationP2，传入参数的值为：" + sdate + "  " + station_name );
+            //传入日期和有功功率代码不能为空
+            if (String.IsNullOrEmpty(sdate) == true || String.IsNullOrEmpty(station_name) == true)
+            {
+                WriteLogFile("调用方法GetStationP2失败，传入参数为空");
+                return "请输入参数";
+            }
+            else
+            {
+                DateTime Day1970 = new DateTime(1970, 1, 1);
+                DateTime DayChart = Convert.ToDateTime(sdate);
+                int days = DateDiff(Day1970, DayChart);
+
+                string tablename = "data" + DayChart.ToString("yyyyMM");
+
+                int yesterday = days - 1;
+                
+                /*
+                return days + "   " + tablename + "    " + yesterday;              
+
+                DateTime date1 = Convert.ToDateTime("1970-01-01").AddDays(Convert.ToDouble(sdate));
+                string tablename = "data" + date1.ToString("yyyyMM");
+
+                int yesterday = Convert.ToInt16(sdate) - 1;
+                 * */
+
+                DataSet Rds = new DataSet();
+                try
+                {
+                    //DB连接设定
+                    checkCn(MyDisDataConnectionStr);
+                    string sql = "SELECT sdate,time,data from xopenshdb." + tablename + " a,xopensdb.手机表示配置表 b where a.sname=b.遥测遥信代码 ";
+                    //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
+
+                    sql += " and b.表示名称='有功功率'  AND RTRIM(b.场站名称) = '" + station_name + "'";
+
+                    sql += " AND (trim(a.sdate)=" + days + " or (trim(a.sdate)=" + yesterday + " and a.time=1440) )";
+
+                    sql += " order by a.sdate,a.time";
+
+                    WriteLogFile(sql);
+
+                    //SQL做成
+                    Rds = ExecSql(sql);
+
+                    if (Rds.Tables[0].Rows.Count < 1)
+                    {
+                        WriteLogFile("调用方法GetStationP2失败，没有找到配置数据！");
+                        return "没有找到GetStationP2配置数据！";
+
+                    }
+                    StringBuilder json = new StringBuilder();
+                    int maxtime = 0;
+
+                    json.Append("{\"pcode\":[");
+                    int oldtime = 0;
+                    int newtime = 0;
+
+                    for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
+                    {
+                        if (i == 0)
+                        {
+                            json.Append("{\"time\":\"0\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
+                            newtime = 0;
+                        }
+                        else
+                        {
+                            json.Append(",{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
+                            newtime = Convert.ToInt16(Rds.Tables[0].Rows[i][1].ToString());
+                        }
+                        if (maxtime < newtime - oldtime)
+                        {
+                            maxtime = newtime - oldtime;
+                        }
+
+                        oldtime = newtime;
+
+                    }
+
+                    json.Append("]");
+
+
+                    sql = "SELECT sdate,time,data from xopenshdb." + tablename + " a,xopensdb.手机表示配置表 b where a.sname=b.遥测遥信代码 ";
+                    //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
+
+                    sql += " and b.表示名称='预测功率'  AND RTRIM(b.场站名称) = '" + station_name + "'";
+
+                    sql += " AND (trim(a.sdate)=" + days + " or (trim(a.sdate)=" + yesterday + " and a.time=1440) )";
+
+                    sql += " order by a.sdate,a.time";
+
+                    WriteLogFile(sql);
+
+                    //SQL做成
+                    Rds = ExecSql(sql);
+
+                    if (Rds.Tables[0].Rows.Count < 1)
+                    {
+                        WriteLogFile("调用方法GetStationP失败，没有找到配置数据！");
+                        return "没有找到GetStationP配置数据！";
+
+                    }
+
+                    json.Append(",\"forecast_pcode\":[");
+
+                    oldtime = 0;
+                    newtime = 0;
+
+                    for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
+                    {
+                        if (i == 0)
+                        {
+                            json.Append("{\"time\":\"0\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
+                            newtime = 0;
+                        }
+                        else
+                        {
+                            json.Append(",{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
+                            newtime = Convert.ToInt16(Rds.Tables[0].Rows[i][1].ToString());
+                        }
+                        if (maxtime < newtime - oldtime)
+                        {
+                            maxtime = newtime - oldtime;
+                        }
+
+                        oldtime = newtime;
+
+                    }
+
+                    json.Append("]");
+                    //json.Append(",\"maxtime\":\"" + maxtime +"\"}");
+
+                    json.Append("}");
+
+                    return json.ToString();
+                }
+                catch (Exception err)
+                {
+                    GC.Collect();
+                    return "获取厂站信息错误" + err.Message;
+                }
+                finally
+                {
+                    cn.Close();
+                    cn.Dispose();
+                }
+                
+            }
+
+        }
+
+        [WebMethod(Description = "传入时间、两个遥测代码，获取实时功率、预测功率数据")]
+        public String GetStationP3(string sdate, string time, string station_name)
+        {
+            WriteLogFile("调用方法GetStationP3，传入参数的值为：" + sdate + "  " + time + "    " + station_name);
+            //传入日期和有功功率代码不能为空
+            if (String.IsNullOrEmpty(sdate) == true || String.IsNullOrEmpty(station_name) == true || String.IsNullOrEmpty(time))
+            {
+                WriteLogFile("调用方法GetStationP3失败，传入参数为空");
+                return "请输入参数";
+            }
+            else
+            {
+                DateTime Day1970 = new DateTime(1970, 1, 1);
+                DateTime DayChart = Convert.ToDateTime(sdate);
+                int days = DateDiff(Day1970, DayChart);
+
+                string tablename = "data" + DayChart.ToString("yyyyMM");
+
+                int yesterday = days - 1;
+
+                /*
+                return days + "   " + tablename + "    " + yesterday;              
+
+                DateTime date1 = Convert.ToDateTime("1970-01-01").AddDays(Convert.ToDouble(sdate));
+                string tablename = "data" + date1.ToString("yyyyMM");
+
+                int yesterday = Convert.ToInt16(sdate) - 1;
+                 * */
+
+                DataSet Rds = new DataSet();
+                try
+                {
+                    //DB连接设定
+                    checkCn(MyDisDataConnectionStr);
+                    string sql = "SELECT sdate,time,data from xopenshdb." + tablename + " a,xopensdb.手机表示配置表 b where a.sname=b.遥测遥信代码 ";
+                    //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
+
+                    sql += " and b.表示名称='有功功率'  AND RTRIM(b.场站名称) = '" + station_name + "'";
+
+                    sql += " AND trim(a.sdate)=" + days +  " and trim(a.time)>" + time;
+
+                    sql += " order by a.sdate,a.time";
+
+                    WriteLogFile(sql);
+
+                    //SQL做成
+                    Rds = ExecSql(sql);
+
+                    if (Rds.Tables[0].Rows.Count < 1)
+                    {
+                        WriteLogFile("调用方法GetStationP3失败，没有找到配置数据！");
+                        return "没有找到GetStationP3配置数据！";
+
+                    }
+                    StringBuilder json = new StringBuilder();
+
+                    json.Append("{\"pcode\":[");
+
+                    for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
+                    {
+                        if (i == 0)
+                        {
+                            json.Append("{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
+                        }
+                        else
+                        {
+                            json.Append(",{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
+                        }
+                        
+
+                    }
+
+                    json.Append("]");
+
+
+                    sql = "SELECT sdate,time,data from xopenshdb." + tablename + " a,xopensdb.手机表示配置表 b where a.sname=b.遥测遥信代码 ";
+                    //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
+
+                    sql += " and b.表示名称='预测功率'  AND RTRIM(b.场站名称) = '" + station_name + "'";
+
+                    sql += " AND trim(a.sdate)=" + days + " and trim(a.time)>" + time;
+
+                    sql += " order by a.sdate,a.time";
+
+                    WriteLogFile(sql);
+
+                    //SQL做成
+                    Rds = ExecSql(sql);
+
+                    if (Rds.Tables[0].Rows.Count < 1)
+                    {
+                        WriteLogFile("调用方法GetStationP3失败，没有找到配置数据！");
+                        return "没有找到GetStationP3配置数据！";
+
+                    }
+
+                    json.Append(",\"forecast_pcode\":[");
+
+                    for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
+                    {
+                        if (i == 0)
+                        {
+                            json.Append("{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
+                        }
+                        else
+                        {
+                            json.Append(",{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
+                          
+                        }                   
+
+                    }
+
+                    json.Append("]");
+
+                    json.Append("}");
+
+                    return json.ToString();
+                }
+                catch (Exception err)
+                {
+                    GC.Collect();
+                    return "获取厂站信息错误" + err.Message;
+                }
+                finally
+                {
+                    cn.Close();
+                    cn.Dispose();
+                }
+
+            }
+
+        }
+
 
         [WebMethod(Description = "传入日期、时间，获取最新的alarm数据")]
         public String GetAlarmData(string sdate, string stime )
@@ -375,11 +673,13 @@ namespace H9000.DataInterFace
                     string sql = "SELECT b.类型名,a.年月日,a.时分秒毫秒,a.事件文字描述 from xopenshdb.历史事项表 a , xopensdb.事项类型表 b  where  a.事件类型=b.类型号 ";
                     //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
 
-                    sql += " AND trim(a.年月日) >= '" + sdate + "'";
+                    sql += " AND trim(a.年月日) >= " + sdate ;
 
-                    sql += " AND trim(a.时分秒毫秒) >= '" + stime + "'";
+                    sql += " AND trim(a.时分秒毫秒) > " + stime;
 
                     sql += " order by a.年月日,a.时分秒毫秒";
+
+                    WriteLogFile(sql);
 
                     //SQL做成
                     Rds = ExecSql(sql);
