@@ -13,12 +13,9 @@ using System.Threading;
 using System.IO;
 using System.Collections;
 using MySql.Data.MySqlClient;
-// using System.Text.StringBuilder;
 
 namespace H9000.DataInterFace
-{/// <summary>
-    /// H9000Service 的摘要说明
-    /// </summary>
+{
     [WebService(Namespace = "http://tempuri.org/")]
     [WebServiceBinding(ConformsTo = WsiProfiles.BasicProfile1_1)]
     [System.ComponentModel.ToolboxItem(false)]
@@ -81,60 +78,59 @@ namespace H9000.DataInterFace
             return datediff;
         }
 
-
+		// TODO make code/data/msg static final 
         [WebMethod(Description = "登录验证")]
         public string isUser(string username, string password)
         {
+			var obj = new JObject();
             WriteLogFile("调用方法isUser，传入参数username的值为：" + username + ",password的值为：" + password);
             if (String.IsNullOrEmpty(username) == true)   //判断传入参数是否为空
             {
                 WriteLogFile("调用方法isUser失败，传入参数为空");
-                return "用户名为空";
+				obj["code"] = 0;
+				obj["msg"] = "用户名为空";
+                return obj.toString();
             }
-            else 
-            {
-                DataSet Rds = new DataSet();
-                try {
+            DataSet Rds = new DataSet();
+               try {
                     checkCn(MyConnectionStr);
                     string sql = "select rights,ranges,levels from appUser where trim(username)='" + username + "' and trim(password)='";
                     if (String.IsNullOrEmpty(password))
-                    {
                         sql += "'";
-                    }
-                    else {
+                    else
                         sql += password + "'";
-                    }
                     //SQL做成
                     Rds = ExecSql(sql);
-
                     if (Rds.Tables[0].Rows.Count < 1)
                     {
                         WriteLogFile("调用方法isUser失败，没有找到该用户数据！");
-                        return "用户名或密码错误";
-
+						obj["code"] = 0;
+						obj["msg"] = "用户名或密码错误";
+                        return obj.toString();
                     }
-                    else {
-
                         WriteLogFile("调用方法isUser成功，获取到的数据结果为：" + Rds.Tables[0].Rows[0][0].ToString().Trim());
-                        StringBuilder json = new StringBuilder();
+//                        StringBuilder json = new StringBuilder();
+//                        json.Append("{\"rights\":\"" + Rds.Tables[0].Rows[0][0].ToString().Trim() + "\",\"ranges\":\"" + Rds.Tables[0].Rows[0][1].ToString().Trim()
+//                            + "\",\"level\":\"" + Rds.Tables[0].Rows[0][2].ToString().Trim() + "\"}");
 
-                        json.Append("{\"rights\":\"" + Rds.Tables[0].Rows[0][0].ToString().Trim() + "\",\"ranges\":\"" + Rds.Tables[0].Rows[0][1].ToString().Trim()
-                            + "\",\"level\":\"" + Rds.Tables[0].Rows[0][2].ToString().Trim() + "\"}");
-
-                        return json.ToString();
-                    }  
-
-                }
-                catch (Exception err) {
+						obj["code"] = 1;
+						obj["msg"] = "success";
+						var data = new JObject();
+						data["rights"] = Rds.Tables[0].Rows[0][0].ToString().Trim();
+						data["ranges"] = Rds.Tables[0].Rows[0][1].ToString().Trim();
+						data["level"] = Rds.Tables[0].Rows[0][2].ToString().Trim();
+						obj["data"] = data;
+                        return obj.toString();
+                }catch (Exception err) {
                     GC.Collect();
-                    return "获取信息失败" + err.Message;
-                }
-                finally {
+                    obj["code"] = 0;
+                    obj["msg"] = err.Message;
+                    return obj.toString();
+                }finally {
                     cn.Close();
                     cn.Dispose();
                 }
             }
-        }
 
         [WebMethod(Description = "获取用户列表信息")]
         public string getUserInfo()
