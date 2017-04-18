@@ -69,6 +69,29 @@ namespace H9000.DataInterFace
             }
         }
 
+        private Boolean ExecOtherSql(String sql)
+        {
+            DataSet Rds = new DataSet();
+            try
+            {
+                if (cn.State.GetHashCode() == 0)
+                {
+                    cn.Open();
+                }
+                if (sql != null)
+                {
+                    cmd.CommandText = sql;
+                }
+                cmd.ExecuteNonQuery();
+                return true;
+            }
+            catch (Exception e)
+            {
+                throw new Exception(e.Message + "执行查询失败！");
+            }
+            return false;
+        }
+
         private static int DateDiff(DateTime DateTime1, DateTime DateTime2)
         {
             int datediff = 0;
@@ -133,10 +156,11 @@ namespace H9000.DataInterFace
                 }
             }
 
-        [WebMethod(Description = "获取用户列表信息")]
+        [WebMethod(Description = "获取用户列表")]
         public string getUserInfo()
         {
             WriteLogFile("调用方法getUserInfo");
+            JObject obj = new JObject();
 
             DataSet Rds = new DataSet();
             try
@@ -149,32 +173,38 @@ namespace H9000.DataInterFace
                 if (Rds.Tables[0].Rows.Count < 1)
                 {
                     WriteLogFile("调用方法getUserInfo失败，没有找到用户数据！");
-                    return "未找到数据";
+                    //return "未找到数据";
+                    obj["code"] = 0;
+                    obj["msg"] = "未找到数据";
+                    return obj.ToString();
 
                 }
-                StringBuilder json = new StringBuilder();
 
-                json.Append("{\"userlist\":[");
+                obj["code"] = 1;
+                obj["msg"] = "success";
 
+                JObject data = new JObject();
+                JArray userlist = new JArray();
+                
                 for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
                 {
-                    if (i == 0)
-                    {
-                        json.Append("{\"userName\":\"" + Rds.Tables[0].Rows[i][0].ToString().Trim() + "\",\"userPassword\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"userRights\":\""
-                            + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\",\"userRange\":\"" + Rds.Tables[0].Rows[i][3].ToString().Trim() + "\",\"userLevel\":\"" + Rds.Tables[0].Rows[i][4].ToString().Trim() + "\"}");
-                    }
-                    else {
-                        json.Append(",{\"userName\":\"" + Rds.Tables[0].Rows[i][0].ToString().Trim() + "\",\"userPassword\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"userRights\":\""
-                            + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\",\"userRange\":\"" + Rds.Tables[0].Rows[i][3].ToString().Trim() + "\",\"userLevel\":\"" + Rds.Tables[0].Rows[i][4].ToString().Trim() + "\"}");
-                    }
-                    
+                    JObject detail = new JObject();
+                    detail["userName"] = Rds.Tables[0].Rows[i][0].ToString().Trim();
+                    detail["userPassword"] = Rds.Tables[0].Rows[i][1].ToString().Trim();
+                    detail["userRights"] = Rds.Tables[0].Rows[i][2].ToString().Trim();
+                    detail["userRange"] = Rds.Tables[0].Rows[i][3].ToString().Trim();
+                    detail["userLevel"] = Rds.Tables[0].Rows[i][4].ToString().Trim();
+                    userlist.Add(detail);
+                                       
                 }
 
-                json.Append("]}");
+                data["userlist"] = userlist;
 
-                WriteLogFile("调用方法getUserInfo成功，获取到的数据结果为：" + json);
+                obj["data"] = data;
 
-                return json.ToString();
+                WriteLogFile("调用方法getUserInfo成功，获取到的数据结果为：" + obj.ToString());
+
+                return obj.ToString();
 
             }
             catch (Exception err)
@@ -189,120 +219,161 @@ namespace H9000.DataInterFace
             }
         }
 
-        [WebMethod(Description = "登录验证")]
+        [WebMethod(Description = "新增用户")]
         public string addUser(string username, string password, string rights, string range, string level)
         {
             WriteLogFile("调用方法addUser，传入参数username的值为：" + username + ",password的值为：" + password);
+            JObject obj = new JObject();
             if (String.IsNullOrEmpty(username) == true || String.IsNullOrEmpty(rights) == true || String.IsNullOrEmpty(level) || String.IsNullOrEmpty(range))   //判断传入参数是否为空
             {
                 WriteLogFile("调用方法addUser失败，传入参数为空");
-                return "参数为空";
+                obj["code"] = 0;
+                obj["msg"] = "参数为空";
+                return obj.ToString();
             }
-            else
+
+            try
             {
-                try
+                checkCn(MyConnectionStr);
+                string sql = "insert into xopensdb.appUser values('" + username + "','";
+                if (String.IsNullOrEmpty(password))
                 {
-                    checkCn(MyConnectionStr);
-                    string sql = "insert into xopensdb.appUser values('" + username + "','";
-                    if (String.IsNullOrEmpty(password))
-                    {
-                        sql += "',";
-                    }
-                    else {
-                        sql += password + "',";
-                    }
-                    sql += "'" + rights + "','" + range + "'," + level + ")";
-                    //SQL做成
-                    ExecSql(sql);
-                    return "true";
-                  
+                    sql += "',";
                 }
-                catch (Exception err)
+                else
                 {
-                    GC.Collect();
-                    return "获取信息失败" + err.Message;
+                    sql += password + "',";
                 }
-                finally
+                sql += "'" + rights + "','" + range + "'," + level + ")";
+                //SQL做成
+                if (ExecOtherSql(sql))
                 {
-                    cn.Close();
-                    cn.Dispose();
+                    obj["code"] = 1;
+                    obj["msg"] = "success";
+                    obj["data"] = "true";
+                    return obj.ToString();
                 }
+                else
+                {
+                    obj["code"] = 0;
+                    obj["msg"] = "插入数据错误";
+                    return obj.ToString();
+                }
+
+            }
+            catch (Exception err)
+            {
+                GC.Collect();
+                obj["code"] = 0;
+                obj["msg"] = "插入数据错误" + err.Message;
+                return obj.ToString();
+            }
+            finally
+            {
+                cn.Close();
+                cn.Dispose();
             }
         }
 
-        [WebMethod(Description = "登录验证")]
+        [WebMethod(Description = "删除用户数据")]
         public string deleteUser(string username)
         {
             WriteLogFile("调用方法deleteUser，传入参数username的值为：" + username);
+            JObject obj = new JObject();
             if (String.IsNullOrEmpty(username) == true )   //判断传入参数是否为空
             {
                 WriteLogFile("调用方法deleteUser失败，传入参数为空");
-                return "参数为空";
+                obj["code"] = 0;
+                obj["msg"] = "参数为空";
+                return obj.ToString();
             }
-            else
+            try
             {
-                try
+                checkCn(MyConnectionStr);
+                string sql = "delete from xopensdb.appUser where userName='" + username + "'";
+                //SQL做成
+                if (ExecOtherSql(sql))
                 {
-                    checkCn(MyConnectionStr);
-                    string sql = "delete from xopensdb.appUser where userName='" + username + "'";                  
-                    //SQL做成
-                    ExecSql(sql);
-                    return "true";
+                    obj["code"] = 1;
+                    obj["msg"] = "success";
+                    obj["data"] = "true";
+                    return obj.ToString();
+                }
+                else
+                {
+                    obj["code"] = 0;
+                    obj["msg"] = "刪除数据错误";
+                    return obj.ToString();
+                }
 
-                }
-                catch (Exception err)
-                {
-                    GC.Collect();
-                    return "获取信息失败" + err.Message;
-                }
-                finally
-                {
-                    cn.Close();
-                    cn.Dispose();
-                }
+            }
+            catch (Exception err)
+            {
+                GC.Collect();
+                obj["code"] = 0;
+                obj["msg"] = "刪除数据错误" + err.Message;
+                return obj.ToString();
+            }
+            finally
+            {
+                cn.Close();
+                cn.Dispose();
             }
         }
 
-        [WebMethod(Description = "登录验证")]
+        [WebMethod(Description = "修改用户数据")]
         public string updateUser(string username, string password, string rights, string range, string level)
         {
             WriteLogFile("调用方法updateUser，传入参数username的值为：" + username);
+            JObject obj = new JObject();
             if (String.IsNullOrEmpty(username) == true || String.IsNullOrEmpty(rights) == true || String.IsNullOrEmpty(level) || String.IsNullOrEmpty(range))   //判断传入参数是否为空
             {
                 WriteLogFile("调用方法updateUser失败，传入参数为空");
-                return "参数为空";
+                obj["code"] = 0;
+                obj["msg"] = "参数为空";
+                return obj.ToString();
             }
-            else
+            try
             {
-                try
+                checkCn(MyConnectionStr);
+                string sql = "update xopensdb.appUser set password='";
+                if (String.IsNullOrEmpty(password))
                 {
-                    checkCn(MyConnectionStr);
-                    string sql = "update xopensdb.appUser set password='";
-                    if (String.IsNullOrEmpty(password))
-                    {
-                        sql += "',";
-                    }
-                    else
-                    {
-                        sql += password + "',";
-                    }
-                    sql += " rights='" + rights + "', ranges='" + range + "', levels=" + level + " where userName='" + username + "'";
-                    WriteLogFile(sql);
-                    //SQL做成
-                    ExecSql(sql);
-                    return "true";
+                    sql += "',";
+                }
+                else
+                {
+                    sql += password + "',";
+                }
+                sql += " rights='" + rights + "', ranges='" + range + "', levels=" + level + " where userName='" + username + "'";
+                WriteLogFile(sql);
+                //SQL做成
+                if (ExecOtherSql(sql))
+                {
+                    obj["code"] = 1;
+                    obj["msg"] = "success";
+                    obj["data"] = "true";
+                    return obj.ToString();
+                }
+                else
+                {
+                    obj["code"] = 0;
+                    obj["msg"] = "修改数据错误";
+                    return obj.ToString();
+                }
 
-                }
-                catch (Exception err)
-                {
-                    GC.Collect();
-                    return "获取信息失败" + err.Message;
-                }
-                finally
-                {
-                    cn.Close();
-                    cn.Dispose();
-                }
+            }
+            catch (Exception err)
+            {
+                GC.Collect();
+                obj["code"] = 0;
+                obj["msg"] = "修改数据错误" + err.Message;
+                return obj.ToString();
+            }
+            finally
+            {
+                cn.Close();
+                cn.Dispose();
             }
         }
 
@@ -310,622 +381,342 @@ namespace H9000.DataInterFace
         public string GetStationInfo(string Str_StationCode)
         {
             WriteLogFile("调用方法GetStationInfo，传入参数Str_StationCode的值为：" + Str_StationCode);
-            if (String.IsNullOrEmpty(Str_StationCode) == true)
+            JObject obj = new JObject();
+            if (String.IsNullOrEmpty(Str_StationCode))
             {
                 WriteLogFile("调用方法GetStationInfo失败，传入参数为空");
-                return "请输入场站ID";
+                obj["code"] = 0;
+                obj["msg"] = "场站ID不能为空";
+                return obj.ToString();
             }
-            else
+            DataSet Rds = new DataSet();
+            try
             {
-                DataSet Rds = new DataSet();
-                try
+                //DB连接设定
+                checkCn(MyConnectionStr);
+                string sql = "SELECT a.场站名称,a.表示名称,b.data FROM 手机表示配置表 a join webservice b on a.遥测遥信代码=b.sname where 1=1 ";
+                //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
+                if (!String.IsNullOrEmpty(Str_StationCode))
                 {
-                    //DB连接设定
-                    checkCn(MyConnectionStr);
-                    string sql = "SELECT a.场站名称,a.表示名称,b.data FROM 手机表示配置表 a join webservice b on a.遥测遥信代码=b.sname where 1=1 ";
-                    //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
-                    if (String.IsNullOrEmpty(Str_StationCode) == false)
-                    {
-                        sql += " AND RTRIM(场站代码) = '" + Str_StationCode + "'";
-                    }
-
-                    sql += " AND trim(分类项目)='stationInfo' AND 风机编号='0'";
-
-                    //SQL做成
-                    Rds = ExecSql(sql);
-
-                    if (Rds.Tables[0].Rows.Count < 1)
-                    {
-                        WriteLogFile("调用方法GetStationInfo失败，没有找到配置数据！");
-                        return "没有找到GetStationInfo配置数据！";
-
-                    }
-                    StringBuilder json = new StringBuilder();
-
-                    json.Append("{\"场站名称\":\"" + Rds.Tables[0].Rows[0][0].ToString().Trim() + "\"");
-
-                    for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
-                    {
-                        json.Append(",\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"");
-
-                    }
-
-                    //获取每台风机详细信息
-                    string sql2 = "SELECT a.风机编号,a.表示名称,b.data FROM 手机表示配置表 a join webservice b on a.遥测遥信代码=b.sname where 1=1 ";
-                    if (String.IsNullOrEmpty(Str_StationCode) == false)
-                    {
-                        sql2 += " and RTRIM(场站代码) = '" + Str_StationCode + "'";
-                    }
-                    sql2 += " AND trim(分类项目)='WTGSInfo' AND trim(风机编号)<>'0' order by 风机编号";
-                    //SQL做成
-                    DataSet Rds2 = ExecSql(sql2);
-
-                    if (Rds2.Tables[0].Rows.Count < 1)
-                    {
-                        WriteLogFile("调用方法GetWTGSInfo失败，没有找到配置数据！");
-                        return "没有找到GetWTGSInfo配置数据！";
-
-                    }
-
-                    string old_num = Rds2.Tables[0].Rows[0][0].ToString();
-                    string new_num = Rds2.Tables[0].Rows[0][0].ToString();
-
-                    json.Append(",\"list\":[{\"编号\":\"" + new_num.Trim() + "\"");
-
-                    for (int i = 0; i < Rds2.Tables[0].Rows.Count; i++)
-                    {
-                        new_num = Rds2.Tables[0].Rows[i][0].ToString();
-                        if (new_num == old_num)
-                        {
-                            json.Append(",\"" + Rds2.Tables[0].Rows[i][1].ToString().Trim() + "\":\"" + Rds2.Tables[0].Rows[i][2].ToString().Trim() + "\"");
-                        }
-                        else
-                        {
-                            json.Append("},{\"编号\":\"" + new_num.Trim() + "\"");
-                            json.Append(",\"" + Rds2.Tables[0].Rows[i][1].ToString().Trim() + "\":\"" + Rds2.Tables[0].Rows[i][2].ToString().Trim() + "\"");
-                            old_num = new_num;
-                        }
-
-                    }
-                    json.Append("}]}");
-
-                    WriteLogFile("调用方法GetStationInfo成功，获取到的数据结果为：" + json);
-
-                    return json.ToString();
+                    sql += " AND RTRIM(场站代码) = '" + Str_StationCode + "'";
                 }
-                catch (Exception err)
+
+                sql += " AND trim(分类项目)='stationInfo' AND 风机编号='0'";
+
+                //SQL做成
+                Rds = ExecSql(sql);
+
+                if (Rds.Tables[0].Rows.Count < 1)
                 {
-                    GC.Collect();
-                    return "获取厂站信息错误" + err.Message;
-                }
-                finally
+                    WriteLogFile("调用方法GetStationInfo失败，没有找到配置数据！");
+                    obj["code"] = 0;
+                    obj["msg"] = "无场站综合数据！";
+                    return obj.ToString();
+
+                }             
+
+                obj["code"] = 1;
+                obj["msg"] = "success";
+
+                obj["stationname"] = Rds.Tables[0].Rows[0][0].ToString().Trim();
+                //TODO 填数据
+                //data["speed"] = "";
+                //data["plan"] = "";
+                //data["power"] = "";
+                //data["speed_average"] = "";
+                for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
                 {
-                    cn.Close();
-                    cn.Dispose();
-                }
-            }
-
-        }
-
-
-        [WebMethod(Description = "传入时间、两个遥测代码，获取实时功率、预测功率数据")]
-        public String GetStationP(string sdate, string pcode, string forecase_pcode)
-        {
-            WriteLogFile("调用方法GetStationP，传入参数的值为：" + sdate + "  " + pcode + "  " + forecase_pcode);
-            //传入日期和有功功率代码不能为空
-            if (String.IsNullOrEmpty(sdate) == true || String.IsNullOrEmpty(pcode) == true || String.IsNullOrEmpty(forecase_pcode) == true)
-            {
-                WriteLogFile("调用方法GetStationP失败，传入参数为空");
-                return "请输入参数";
-            }
-            else
-            {
-                DateTime date1 = Convert.ToDateTime("1970-01-01").AddDays(Convert.ToDouble(sdate));
-                string tablename = "data" + date1.ToString("yyyyMM");
-
-                int yesterday = Convert.ToInt16(sdate) - 1;
-         
-                DataSet Rds = new DataSet();
-                try
-                {
-                    //DB连接设定
-                    checkCn(MyDisDataConnectionStr);
-                    string sql = "SELECT sdate,time,data from " + tablename + " where flag=1 ";
-                    //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
-                    
-                    sql += " AND RTRIM(sname) = '" + pcode + "'";
-
-                    sql += " AND (trim(sdate)=" + sdate + " or (trim(sdate)=" + yesterday + " and time=1440) )";
-
-                    sql += " order by sdate,time";
-
-                    //SQL做成
-                    Rds = ExecSql(sql);
-
-                    if (Rds.Tables[0].Rows.Count < 1)
-                    {
-                        WriteLogFile("调用方法GetStationP失败，没有找到配置数据！");
-                        return "没有找到GetStationP配置数据！";
-
-                    }
-                    StringBuilder json = new StringBuilder();
-                    int maxtime = 0;
-
-                    json.Append("{\"pcode\":[");
-                    int oldtime = 0;
-                    int newtime = 0;
-
-                    for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
-                    {
-                        if (i == 0)
-                        {
-                            json.Append("{\"time\":\"0\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
-                            newtime = 0;
-                        }
-                        else 
-                        {
-                            json.Append(",{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
-                            newtime = Convert.ToInt16(Rds.Tables[0].Rows[i][1].ToString());
-                        }
-                        if (maxtime < newtime - oldtime) {
-                            maxtime = newtime - oldtime;
-                        }
-
-                        oldtime = newtime;
-                        
-                    }
-
-                    json.Append("]");
-
-                    
-                    sql = "SELECT sdate,time,data from " + tablename + " where flag=1 ";
-                    //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
-
-                    sql += " AND RTRIM(sname) = '" + forecase_pcode + "'";
-
-                    sql += " AND (trim(sdate)=" + sdate + " or (trim(sdate)=" + yesterday + " and time=1440) )";
-
-                    sql += " order by sdate,time";
-
-                    //SQL做成
-                    Rds = ExecSql(sql);
-
-                    if (Rds.Tables[0].Rows.Count < 1)
-                    {
-                        WriteLogFile("调用方法GetStationP失败，没有找到配置数据！");
-                        return "没有找到GetStationP配置数据！";
-
-                    }
-                    
-                    json.Append(",\"forecast_pcode\":[");
-
-                    oldtime = 0;
-                    newtime = 0;
-
-                    for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
-                    {
-                        if (i == 0)
-                        {
-                            json.Append("{\"time\":\"0\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
-                            newtime = 0;
-                        }
-                        else
-                        {
-                            json.Append(",{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
-                            newtime = Convert.ToInt16(Rds.Tables[0].Rows[i][1].ToString());
-                        }
-                        if (maxtime < newtime - oldtime)
-                        {
-                            maxtime = newtime - oldtime;
-                        }
-
-                        oldtime = newtime;
-
-                    }
-
-                    json.Append("]");
-                    //json.Append(",\"maxtime\":\"" + maxtime +"\"}");
-                    
-                    json.Append("}");
-
-                    return json.ToString();
-                }
-                catch (Exception err)
-                {
-                    GC.Collect();
-                    return "获取厂站信息错误" + err.Message;
-                }
-                finally
-                {
-                    cn.Close();
-                    cn.Dispose();
-                }
-                 
-            }
-
-        }
-
-        [WebMethod(Description = "传入时间、两个遥测代码，获取实时功率、预测功率数据")]
-        public String GetStationP2(string sdate, string station_name)
-        {
-            WriteLogFile("调用方法GetStationP2，传入参数的值为：" + sdate + "  " + station_name );
-            //传入日期和有功功率代码不能为空
-            if (String.IsNullOrEmpty(sdate) == true || String.IsNullOrEmpty(station_name) == true)
-            {
-                WriteLogFile("调用方法GetStationP2失败，传入参数为空");
-                return "请输入参数";
-            }
-            else
-            {
-                DateTime Day1970 = new DateTime(1970, 1, 1);
-                DateTime DayChart = Convert.ToDateTime(sdate);
-                int days = DateDiff(Day1970, DayChart);
-
-                string tablename = "data" + DayChart.ToString("yyyyMM");
-
-                int yesterday = days - 1;
-                
-                /*
-                return days + "   " + tablename + "    " + yesterday;              
-
-                DateTime date1 = Convert.ToDateTime("1970-01-01").AddDays(Convert.ToDouble(sdate));
-                string tablename = "data" + date1.ToString("yyyyMM");
-
-                int yesterday = Convert.ToInt16(sdate) - 1;
-                 * */
-
-                DataSet Rds = new DataSet();
-                try
-                {
-                    //DB连接设定
-                    checkCn(MyDisDataConnectionStr);
-                    string sql = "SELECT sdate,time,data from xopenshdb." + tablename + " a,xopensdb.手机表示配置表 b where a.sname=b.遥测遥信代码 ";
-                    //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
-
-                    sql += " and b.表示名称='有功功率'  AND RTRIM(b.场站代码) = '" + station_name + "'";
-
-                    sql += " AND (trim(a.sdate)=" + days + " or (trim(a.sdate)=" + yesterday + " and a.time=1440) )";
-
-                    sql += " order by a.sdate,a.time";
-
-                    WriteLogFile(sql);
-
-                    //SQL做成
-                    Rds = ExecSql(sql);
-
-                    if (Rds.Tables[0].Rows.Count < 1)
-                    {
-                        WriteLogFile("调用方法GetStationP2失败，没有找到配置数据！");
-                        return "没有找到GetStationP2配置数据！";
-
-                    }
-                    StringBuilder json = new StringBuilder();
-                    int maxtime = 0;
-
-                    json.Append("{\"pcode\":[");
-                    int oldtime = 0;
-                    int newtime = 0;
-
-                    for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
-                    {
-                        if (i == 0)
-                        {
-                            json.Append("{\"time\":\"0\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
-                            newtime = 0;
-                        }
-                        else
-                        {
-                            json.Append(",{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
-                            newtime = Convert.ToInt16(Rds.Tables[0].Rows[i][1].ToString());
-                        }
-                        if (maxtime < newtime - oldtime)
-                        {
-                            maxtime = newtime - oldtime;
-                        }
-
-                        oldtime = newtime;
-
-                    }
-
-                    json.Append("]");
-
-
-                    sql = "SELECT sdate,time,data from xopenshdb." + tablename + " a,xopensdb.手机表示配置表 b where a.sname=b.遥测遥信代码 ";
-                    //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
-
-                    sql += " and b.表示名称='预测功率'  AND RTRIM(b.场站代码) = '" + station_name + "'";
-
-                    sql += " AND (trim(a.sdate)=" + days + " or (trim(a.sdate)=" + yesterday + " and a.time=1440) )";
-
-                    sql += " order by a.sdate,a.time";
-
-                    WriteLogFile(sql);
-
-                    //SQL做成
-                    Rds = ExecSql(sql);
-
-                    if (Rds.Tables[0].Rows.Count < 1)
-                    {
-                        WriteLogFile("调用方法GetStationP失败，没有找到配置数据！");
-                        return "没有找到GetStationP配置数据！";
-
-                    }
-
-                    json.Append(",\"forecast_pcode\":[");
-
-                    oldtime = 0;
-                    newtime = 0;
-
-                    for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
-                    {
-                        if (i == 0)
-                        {
-                            json.Append("{\"time\":\"0\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
-                            newtime = 0;
-                        }
-                        else
-                        {
-                            json.Append(",{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
-                            newtime = Convert.ToInt16(Rds.Tables[0].Rows[i][1].ToString());
-                        }
-                        if (maxtime < newtime - oldtime)
-                        {
-                            maxtime = newtime - oldtime;
-                        }
-
-                        oldtime = newtime;
-
-                    }
-
-                    json.Append("]");
-                    //json.Append(",\"maxtime\":\"" + maxtime +"\"}");
-
-                    json.Append("}");
-
-                    return json.ToString();
-                }
-                catch (Exception err)
-                {
-                    GC.Collect();
-                    return "获取厂站信息错误" + err.Message;
-                }
-                finally
-                {
-                    cn.Close();
-                    cn.Dispose();
+                    //json.Append(",\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"");
+                    obj[Rds.Tables[0].Rows[i][1].ToString().Trim()] = Rds.Tables[0].Rows[i][2].ToString().Trim();
                 }
                 
-            }
+                //获取每台风机详细信息
+                string sql2 = "SELECT a.风机编号,a.表示名称,b.data FROM 手机表示配置表 a join webservice b on a.遥测遥信代码=b.sname where 1=1 ";
+                if (!String.IsNullOrEmpty(Str_StationCode))
+                {
+                    sql2 += " and RTRIM(场站代码) = '" + Str_StationCode + "'";
+                }
+                sql2 += " AND trim(分类项目)='WTGSInfo' AND trim(风机编号)<>'0' order by 风机编号";
+                //SQL做成
+                DataSet Rds2 = ExecSql(sql2);
 
+                if (Rds2.Tables[0].Rows.Count < 1)
+                {
+                    WriteLogFile("调用方法GetWTGSInfo失败，没有找到配置数据！");
+                    obj["code"] = 0;
+                    obj["msg"] = "无设备详情数据！";
+                    return obj.ToString();
+
+                }
+
+                JObject data = new JObject();
+                JArray list = new JArray();
+
+                string old_num = Rds2.Tables[0].Rows[0][0].ToString();
+                string new_num = Rds2.Tables[0].Rows[0][0].ToString();
+
+                //json.Append(",\"list\":[{\"编号\":\"" + new_num.Trim() + "\"");
+                JObject detail = new JObject();
+                for (int i = 0; i < Rds2.Tables[0].Rows.Count; i++)
+                { 
+                    detail["编号"] = new_num.Trim();
+                    new_num = Rds2.Tables[0].Rows[i][0].ToString();
+                    if (new_num == old_num)
+                    {
+                        //json.Append(",\"" + Rds2.Tables[0].Rows[i][1].ToString().Trim() + "\":\"" + Rds2.Tables[0].Rows[i][2].ToString().Trim() + "\"");
+                        detail[Rds2.Tables[0].Rows[i][1].ToString().Trim()] = Rds2.Tables[0].Rows[i][2].ToString().Trim();
+                    }
+                    else
+                    {
+                        //json.Append("},{\"编号\":\"" + new_num.Trim() + "\"");
+                        //json.Append(",\"" + Rds2.Tables[0].Rows[i][1].ToString().Trim() + "\":\"" + Rds2.Tables[0].Rows[i][2].ToString().Trim() + "\"");
+                        list.Add(detail);
+                        detail = new JObject();
+                        detail["编号"] = new_num.Trim();
+                        detail[Rds2.Tables[0].Rows[i][1].ToString().Trim()] = Rds2.Tables[0].Rows[i][2].ToString().Trim();
+                        old_num = new_num;
+                    }
+
+                }
+                list.Add(detail);
+
+                data["list"] = list;
+                obj["data"] = data;
+
+                WriteLogFile("调用方法GetStationInfo成功，获取到的数据结果为：" + obj.ToString());
+
+                return obj.ToString();
+            }
+            catch (Exception err)
+            {
+                GC.Collect();
+                obj["code"] = 0;
+                obj["msg"] = "获取数据失败！" + err.Message;
+                return obj.ToString();
+            }
+            finally
+            {
+                cn.Close();
+                cn.Dispose();
+            }    
         }
 
         [WebMethod(Description = "传入时间、两个遥测代码，获取实时功率、预测功率数据")]
-        public String GetStationP3(string sdate, string time, string station_name)
+        public String GetStationPower(string sdate, string time, string station_name)
         {
-            WriteLogFile("调用方法GetStationP3，传入参数的值为：" + sdate + "  " + time + "    " + station_name);
+            WriteLogFile("调用方法GetStationPower，传入参数的值为：" + sdate + "  " + time + "    " + station_name);
             //传入日期和有功功率代码不能为空
+            JObject obj = new JObject();
             if (String.IsNullOrEmpty(sdate) == true || String.IsNullOrEmpty(station_name) == true || String.IsNullOrEmpty(time))
             {
                 WriteLogFile("调用方法GetStationP3失败，传入参数为空");
-                return "请输入参数";
+                obj["code"] = 0;
+                obj["msg"] = "参数错误";
+                return obj.ToString();
             }
-            else
+
+
+            DateTime Day1970 = new DateTime(1970, 1, 1);
+            DateTime DayChart = Convert.ToDateTime(sdate);
+            int days = DateDiff(Day1970, DayChart);
+
+            string tablename = "data" + DayChart.ToString("yyyyMM");
+
+            int yesterday = days - 1;
+
+            DataSet Rds = new DataSet();
+            String sql = "";
+            try
             {
-                if (time.Equals("0"))
+                //DB连接设定
+                checkCn(MyDisDataConnectionStr);
+
+                 sql = "SELECT sdate,time,data from xopenshdb." + tablename + " a,xopensdb.手机表示配置表 b where a.sname=b.遥测遥信代码 ";
+                //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
+
+                sql += " and b.表示名称='有功功率'  AND RTRIM(b.场站名称) = '" + station_name + "'";
+
+                sql += " AND (trim(a.sdate)=" + days;
+
+                sql += time.Equals("0") ? " or (trim(a.sdate)=" + yesterday + " and a.time=1440)" : " and trim(a.time)>" + time;
+
+                sql += ") order by a.sdate,a.time";
+
+                WriteLogFile(sql);
+
+                //SQL做成
+                Rds = ExecSql(sql);
+
+                if (Rds.Tables[0].Rows.Count < 1)
                 {
-                    return GetStationP2(sdate, station_name);
+                    WriteLogFile("调用方法GetStationP3失败，没有找到配置数据！");
+                    obj["code"] = 0;
+                    obj["msg"] = "获取配置数据失败！"+sql;
+                    return obj.ToString();
+
                 }
-                else {
-                    DateTime Day1970 = new DateTime(1970, 1, 1);
-                    DateTime DayChart = Convert.ToDateTime(sdate);
-                    int days = DateDiff(Day1970, DayChart);
 
-                    string tablename = "data" + DayChart.ToString("yyyyMM");
+                obj["code"] = 1;
+                obj["msg"] = "success";
 
-                    int yesterday = days - 1;
+                JObject data = new JObject();
+                JArray pcode = new JArray();
+                JArray forecast_pcode = new JArray();
 
-                    /*
-                    return days + "   " + tablename + "    " + yesterday;              
+                for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
+                {
+                    JObject detail = new JObject();
+                    detail["time"] = Rds.Tables[0].Rows[i][1].ToString().Trim();
+                    detail["data"] = Rds.Tables[0].Rows[i][2].ToString().Trim();
+                    pcode.Add(detail);
+                }
+                data["pcode"] = pcode;
 
-                    DateTime date1 = Convert.ToDateTime("1970-01-01").AddDays(Convert.ToDouble(sdate));
-                    string tablename = "data" + date1.ToString("yyyyMM");
+                sql = "SELECT sdate,time,data from xopenshdb." + tablename + " a,xopensdb.手机表示配置表 b where a.sname=b.遥测遥信代码 ";
+                //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
 
-                    int yesterday = Convert.ToInt16(sdate) - 1;
-                     * */
+                sql += " and b.表示名称='预测功率'  AND RTRIM(b.场站名称) = '" + station_name + "'";
 
-                    DataSet Rds = new DataSet();
-                    try
-                    {
-                        //DB连接设定
-                        checkCn(MyDisDataConnectionStr);
-                        string sql = "SELECT sdate,time,data from xopenshdb." + tablename + " a,xopensdb.手机表示配置表 b where a.sname=b.遥测遥信代码 ";
-                        //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
+                sql += " AND trim(a.sdate)=" + days;
 
-                        sql += " and b.表示名称='有功功率'  AND RTRIM(b.场站代码) = '" + station_name + "'";
+                sql += time.Equals("0") ? " or (trim(a.sdate)=" + yesterday + " and a.time=1440)" : " and trim(a.time)>" + time;
 
-                        sql += " AND trim(a.sdate)=" + days + " and trim(a.time)>" + time;
+                sql += " order by a.sdate,a.time";
 
-                        sql += " order by a.sdate,a.time";
+                WriteLogFile(sql);
 
-                        WriteLogFile(sql);
+                //SQL做成
+                Rds = ExecSql(sql);
 
-                        //SQL做成
-                        Rds = ExecSql(sql);
+                if (Rds.Tables[0].Rows.Count < 1)
+                {
+                    WriteLogFile("调用方法GetStationP3失败，没有找到配置数据！");
+                    obj["code"] = 0;
+                    obj["msg"] = "获取配置数据失败！"+sql;
+                    return obj.ToString();
 
-                        if (Rds.Tables[0].Rows.Count < 1)
-                        {
-                            WriteLogFile("调用方法GetStationP3失败，没有找到配置数据！");
-                            return "没有找到GetStationP3配置数据！";
+                }
 
-                        }
-                        StringBuilder json = new StringBuilder();
+                for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
+                {
+                    JObject detail = new JObject();
+                    detail["time"] = Rds.Tables[0].Rows[i][1].ToString().Trim();
+                    detail["data"] = Rds.Tables[0].Rows[i][2].ToString().Trim();
+                    forecast_pcode.Add(detail);
+                }
 
-                        json.Append("{\"pcode\":[");
+                data["forecast_pcode"] = forecast_pcode;
+                obj["data"] = data;
 
-                        for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
-                        {
-                            if (i == 0)
-                            {
-                                json.Append("{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
-                            }
-                            else
-                            {
-                                json.Append(",{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
-                            }
-
-
-                        }
-
-                        json.Append("]");
-
-
-                        sql = "SELECT sdate,time,data from xopenshdb." + tablename + " a,xopensdb.手机表示配置表 b where a.sname=b.遥测遥信代码 ";
-                        //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
-
-                        sql += " and b.表示名称='预测功率'  AND RTRIM(b.场站代码) = '" + station_name + "'";
-
-                        sql += " AND trim(a.sdate)=" + days + " and trim(a.time)>" + time;
-
-                        sql += " order by a.sdate,a.time";
-
-                        WriteLogFile(sql);
-
-                        //SQL做成
-                        Rds = ExecSql(sql);
-
-                        if (Rds.Tables[0].Rows.Count < 1)
-                        {
-                            WriteLogFile("调用方法GetStationP3失败，没有找到配置数据！");
-                            return "没有找到GetStationP3配置数据！";
-
-                        }
-
-                        json.Append(",\"forecast_pcode\":[");
-
-                        for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
-                        {
-                            if (i == 0)
-                            {
-                                json.Append("{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
-                            }
-                            else
-                            {
-                                json.Append(",{\"time\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"data\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\"}");
-
-                            }
-
-                        }
-
-                        json.Append("]");
-
-                        json.Append("}");
-
-                        return json.ToString();
-                    }
-                    catch (Exception err)
-                    {
-                        GC.Collect();
-                        return "获取厂站信息错误" + err.Message;
-                    }
-                    finally
-                    {
-                        cn.Close();
-                        cn.Dispose();
-                    }
-                }                
-
+                return obj.ToString();
             }
+            catch (Exception err)
+            {
+                GC.Collect();
+                obj["code"] = 0;
+                obj["msg"] = err.Message+"----->"+sql;
+                return obj.ToString();
+            }
+            finally
+            {
+                cn.Close();
+                cn.Dispose();
+            }          
 
         }
-
 
         [WebMethod(Description = "传入日期、时间，获取最新的alarm数据")]
         public String GetAlarmData(string sdate, string stime, string ranges, string level)
         {
             WriteLogFile("调用方法GetAlarmData，传入参数的值为：" + sdate + "  " + stime);
+            JObject obj = new JObject();
             //传入日期、时间不能为空
             if (String.IsNullOrEmpty(sdate) == true || String.IsNullOrEmpty(stime) == true)
             {
                 WriteLogFile("调用方法GetAlarmData失败，传入参数为空");
-                return "请输入参数";
+                obj["code"] = 0;
+                obj["msg"] = "参数为空";
+                return obj.ToString();
             }
-            else
+            DataSet Rds = new DataSet();
+            try
             {
+                //DB连接设定
+                checkCn(MyDisDataConnectionStr);
+                string sql = "select if(bb.名称 is null,'系统',bb.名称) 场站,aa.类型名,aa.年月日,aa.时分秒毫秒,aa.事件文字描述 from (SELECT a.事件对象组名,b.类型名,a.年月日,a.时分秒毫秒,a.事件文字描述 from xopenshdb.历史事项表 a , xopensdb.事项类型表 b  where  a.事件类型=b.类型号 ";
+                //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
 
-                DataSet Rds = new DataSet();
-                try
+                sql += " AND trim(a.年月日) >= " + sdate;
+
+                sql += " AND trim(a.时分秒毫秒) > " + stime;
+
+                sql += " )aa left outer join xopensdb.厂站参数表 bb on aa.事件对象组名=bb.编号";
+
+                if (!String.IsNullOrEmpty(ranges))
                 {
-                    //DB连接设定
-                    checkCn(MyDisDataConnectionStr);
-                    string sql = "select if(bb.名称 is null,'系统',bb.名称) 场站,aa.类型名,aa.年月日,aa.时分秒毫秒,aa.事件文字描述 from (SELECT a.事件对象组名,b.类型名,a.年月日,a.时分秒毫秒,a.事件文字描述 from xopenshdb.历史事项表 a , xopensdb.事项类型表 b  where  a.事件类型=b.类型号 ";
-                    //string sql = "SELECT 厂站代码,表示名称,遥测遥信代码 FROM H9000.手机表示配置表 ";
 
-                    sql += " AND trim(a.年月日) >= " + sdate ;
+                    sql = "select * from (" + sql;
 
-                    sql += " AND trim(a.时分秒毫秒) > " + stime;
-
-                    sql += " )aa left outer join xopensdb.厂站参数表 bb on aa.事件对象组名=bb.编号";
-
-                    if (!String.IsNullOrEmpty(ranges)) {
-
-                        sql = "select * from (" + sql;
-
-                        if (level.Equals("1"))
-                        {
-                            sql += " )tmp where 场站 in ('系统','" + ranges.Replace(",", "','") + "')";
-                        }
-                        else {
-                            sql += " )tmp where 场站 in ('" + ranges.Replace(",", "','") + "')";
-                        }
-                        
+                    if (level.Equals("1"))
+                    {
+                        sql += " )tmp where 场站 in ('系统','" + ranges.Replace(",", "','") + "')";
+                    }
+                    else
+                    {
+                        sql += " )tmp where 场站 in ('" + ranges.Replace(",", "','") + "')";
                     }
 
-                    sql += " order by 年月日,时分秒毫秒";
-
-                    WriteLogFile(sql);
-
-                    //SQL做成
-                    Rds = ExecSql(sql);
-
-                    if (Rds.Tables[0].Rows.Count < 1)
-                    {
-                        WriteLogFile("调用方法GetAlarmData失败，没有找到配置数据！");
-                        return "没有找到GetAlarmData配置数据！";
-
-                    }
-                    StringBuilder json = new StringBuilder();
-                    json.Append("{\"AlarmData\":[");
-
-                    for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
-                    {
-                        if (i == 0)
-                        {
-                            json.Append("{\"场站\":\"" + Rds.Tables[0].Rows[i][0].ToString().Trim() + "\"");
-                            json.Append(",\"类型名\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"日期\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\",\"时间\":\"" + Rds.Tables[0].Rows[i][3].ToString().Trim() + "\",\"事项\":\"" + Rds.Tables[0].Rows[i][4].ToString().Trim() + "\"}");
-                        }
-                        else
-                        {
-                            json.Append(",{\"场站\":\"" + Rds.Tables[0].Rows[i][0].ToString().Trim() + "\"");
-                            json.Append(",\"类型名\":\"" + Rds.Tables[0].Rows[i][1].ToString().Trim() + "\",\"日期\":\"" + Rds.Tables[0].Rows[i][2].ToString().Trim() + "\",\"时间\":\"" + Rds.Tables[0].Rows[i][3].ToString().Trim() + "\",\"事项\":\"" + Rds.Tables[0].Rows[i][4].ToString().Trim() + "\"}");
-                            
-                        }                        
-
-                    }                    
-                    json.Append("]}");
-
-                    return json.ToString();
                 }
-                catch (Exception err)
+
+                sql += " order by 年月日,时分秒毫秒";
+
+                WriteLogFile(sql);
+
+                //SQL做成
+                Rds = ExecSql(sql);
+
+                if (Rds.Tables[0].Rows.Count < 1)
                 {
-                    GC.Collect();
-                    return "获取厂站信息错误" + err.Message;
-                }
-                finally
-                {
-                    cn.Close();
-                    cn.Dispose();
+                    WriteLogFile("调用方法GetAlarmData失败，没有找到配置数据！");
+                    obj["code"] = 0;
+                    obj["msg"] = "未找到配置数据";
+                    return obj.ToString();
+
                 }
 
+                obj["code"] = 1;
+                obj["msg"] = "success";
+
+                //StringBuilder json = new StringBuilder();
+                //json.Append("{\"AlarmData\":[");
+                JObject data = new JObject();
+                JArray AlarmData = new JArray();
+
+                for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
+                {
+                    JObject detail = new JObject();
+                    detail["station"] = Rds.Tables[0].Rows[i][0].ToString().Trim();
+                    detail["type"] = Rds.Tables[0].Rows[i][1].ToString().Trim();
+                    detail["date"] = Rds.Tables[0].Rows[i][2].ToString().Trim();
+                    detail["time"] = Rds.Tables[0].Rows[i][3].ToString().Trim();
+                    AlarmData.Add(detail);
+                }
+                data["AlarmData"] = AlarmData;
+                obj["data"] = data;
+
+                return obj.ToString();
+            }
+            catch (Exception err)
+            {
+                GC.Collect();
+                obj["code"] = 0;
+                obj["msg"] = "获取数据错误" + err.Message;
+                return obj.ToString();
+            }
+            finally
+            {
+                cn.Close();
+                cn.Dispose();
             }
 
         }
@@ -989,6 +780,8 @@ namespace H9000.DataInterFace
         [WebMethod(Description = "获取场站列表")]
         public string GetStationName(String ranges)
         {
+            JObject obj = new JObject();
+
             WriteLogFile("调用getStationName()");
             DataSet Rds = new DataSet();
             try
@@ -1012,30 +805,32 @@ namespace H9000.DataInterFace
                 if (Rds.Tables[0].Rows.Count < 1)
                 {
                     WriteLogFile("调用方法getStationName失败，没有找到配置数据！");
-                    return "没有找到getStationName配置数据！";
+                    obj["code"] = 0;
+                    obj["msg"] = "获取场站名配置信息失败！";
+                    return obj.ToString();
 
                 }
-                StringBuilder json = new StringBuilder();
 
+                obj["code"] = 1;
+                obj["msg"] = "success";
+                JArray data = new JArray();
 
                 for (int i = 0; i < Rds.Tables[0].Rows.Count; i++)
                 {
-                    if (i == 0)
-                    {
-                        json.Append( Rds.Tables[0].Rows[i][0].ToString().Trim() );
-                    }
-                    else
-                    {
-                        json.Append("," + Rds.Tables[0].Rows[i][0].ToString().Trim());
-                    }                    
-                }             
-               
-                return json.ToString();
+                    JObject detail = new JObject();
+                    detail["StationName"] = Rds.Tables[0].Rows[i][0].ToString().Trim();
+                    data.Add(detail);                                  
+                }
+
+                obj["data"] = data;
+                return obj.ToString();
             }
             catch (Exception err)
             {
                 GC.Collect();
-                return "获取厂站信息错误" + err.Message;
+                obj["code"] = 0;
+                obj["msg"] = err.Message;
+                return obj.ToString();
             }
             finally
             {
