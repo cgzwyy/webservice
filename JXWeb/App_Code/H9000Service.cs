@@ -13,6 +13,7 @@ using System.Threading;
 using System.IO;
 using System.Collections;
 using MySql.Data.MySqlClient;
+using Newtonsoft.Json.Linq;
 
 namespace H9000.DataInterFace
 {
@@ -82,14 +83,14 @@ namespace H9000.DataInterFace
         [WebMethod(Description = "登录验证")]
         public string isUser(string username, string password)
         {
-			var obj = new JObject();
+            JObject obj = new JObject();
             WriteLogFile("调用方法isUser，传入参数username的值为：" + username + ",password的值为：" + password);
             if (String.IsNullOrEmpty(username) == true)   //判断传入参数是否为空
             {
                 WriteLogFile("调用方法isUser失败，传入参数为空");
 				obj["code"] = 0;
 				obj["msg"] = "用户名为空";
-                return obj.toString();
+                return obj.ToString();
             }
             DataSet Rds = new DataSet();
                try {
@@ -106,7 +107,7 @@ namespace H9000.DataInterFace
                         WriteLogFile("调用方法isUser失败，没有找到该用户数据！");
 						obj["code"] = 0;
 						obj["msg"] = "用户名或密码错误";
-                        return obj.toString();
+                        return obj.ToString();
                     }
                         WriteLogFile("调用方法isUser成功，获取到的数据结果为：" + Rds.Tables[0].Rows[0][0].ToString().Trim());
 //                        StringBuilder json = new StringBuilder();
@@ -115,17 +116,17 @@ namespace H9000.DataInterFace
 
 						obj["code"] = 1;
 						obj["msg"] = "success";
-						var data = new JObject();
+                        JObject data = new JObject();
 						data["rights"] = Rds.Tables[0].Rows[0][0].ToString().Trim();
 						data["ranges"] = Rds.Tables[0].Rows[0][1].ToString().Trim();
 						data["level"] = Rds.Tables[0].Rows[0][2].ToString().Trim();
 						obj["data"] = data;
-                        return obj.toString();
+                        return obj.ToString();
                 }catch (Exception err) {
                     GC.Collect();
                     obj["code"] = 0;
                     obj["msg"] = err.Message;
-                    return obj.toString();
+                    return obj.ToString();
                 }finally {
                     cn.Close();
                     cn.Dispose();
