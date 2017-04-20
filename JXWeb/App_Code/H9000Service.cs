@@ -20,6 +20,7 @@ namespace H9000.DataInterFace
     [WebService(Namespace = "http://tempuri.org/")]
     [WebServiceBinding(ConformsTo = WsiProfiles.BasicProfile1_1)]
     [System.ComponentModel.ToolboxItem(false)]
+	//TODO add overall jsondata control
     public class H9000Service : System.Web.Services.WebService
     {
         public static DataSource ds;
